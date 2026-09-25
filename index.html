@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScamScope - on-device scam checker</title>
+<style>
+  :root {
+    --bg: #06141b; --panel: #0c2029; --panel2: #091a22; --line: #1b3a44;
+    --text: #e7f6f4; --muted: #8fb4b3; --accent: #2dd4bf;
+    --red: #ff5d6c; --amber: #ffb454; --green: #3fd68f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 780px; margin: 0 auto; padding: 40px 20px 60px; }
+  h1 {
+    margin: 0 0 6px; font-size: 30px;
+    background: linear-gradient(90deg, #7ff0d4, #2dd4bf 40%, #38bdf8);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tag { color: var(--muted); margin: 0 0 26px; }
+  .tag em { color: var(--text); font-style: normal; font-weight: 600; }
+  .samples { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip-btn {
+    background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 12px; font-size: 12.5px; cursor: pointer;
+  }
+  .chip-btn:hover { color: var(--text); border-color: var(--accent); }
+  textarea {
+    width: 100%; min-height: 130px; resize: vertical;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; font-size: 15px; font-family: inherit;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; align-items: center; gap: 14px; margin: 14px 0 8px; }
+  #go {
+    background: linear-gradient(90deg, #0d9488, #0891b2);
+    color: white; border: none; border-radius: 12px;
+    padding: 12px 22px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  #go:disabled { opacity: 0.55; cursor: wait; }
+  #status { color: var(--muted); font-size: 13.5px; }
+  .bar { height: 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin-bottom: 18px; }
+  #fill { height: 100%; width: 0; background: linear-gradient(90deg, #14b8a6, #38bdf8); transition: width 0.3s; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; padding: 20px 22px; margin-top: 20px;
+  }
+  .vrow { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .badge {
+    font-size: 20px; font-weight: 800; letter-spacing: 0.4px;
+    padding: 6px 16px; border-radius: 10px; background: #12333b;
+  }
+  .badge.scam { background: rgba(255, 93, 108, 0.16); color: var(--red); border: 1px solid rgba(255, 93, 108, 0.5); }
+  .badge.susp { background: rgba(255, 180, 84, 0.14); color: var(--amber); border: 1px solid rgba(255, 180, 84, 0.5); }
+  .badge.legit { background: rgba(63, 214, 143, 0.13); color: var(--green); border: 1px solid rgba(63, 214, 143, 0.5); }
+  .pill { color: var(--muted); font-size: 13px; border: 1px solid var(--line); padding: 3px 10px; border-radius: 999px; }
+  .sec { margin-top: 16px; }
+  .sec h3 {
+    margin: 0 0 8px; font-size: 12px; letter-spacing: 1.4px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tchip {
+    font-size: 13px; padding: 5px 12px; border-radius: 999px;
+    background: rgba(255, 93, 108, 0.10); color: #ffaab2;
+    border: 1px solid rgba(255, 93, 108, 0.35);
+  }
+  .tchip.ok { background: rgba(63, 214, 143, 0.10); color: #7fe8b8; border-color: rgba(63, 214, 143, 0.35); }
+  ul { margin: 0; padding-left: 20px; }
+  li { margin: 5px 0; }
+  #dont li { color: #ffb7bd; }
+  #safer {
+    margin: 0; padding: 12px 14px; border-radius: 12px;
+    background: rgba(45, 212, 191, 0.10); border: 1px solid rgba(45, 212, 191, 0.35);
+  }
+  .raw {
+    background: var(--panel2); border: 1px dashed var(--line); color: var(--muted);
+    border-radius: 12px; padding: 12px 14px; margin-top: 18px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+    white-space: pre-wrap; max-height: 220px; overflow: auto;
+  }
+  .err {
+    margin-top: 18px; padding: 12px 14px; border-radius: 12px;
+    background: rgba(255, 93, 108, 0.10); border: 1px solid rgba(255, 93, 108, 0.45);
+    color: #ffb7bd; font-size: 14px;
+  }
+  footer { margin-top: 34px; color: var(--muted); font-size: 12.5px; text-align: center; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1~GT&#128737;&#65039; ScamScope</h1>
+  <p class="tag">Paste a suspicious SMS, WhatsApp message or email. A small AI model runs
+    <em>entirely on your machine</em> (QVAC on-device SDK) and streams back a verdict card.
+    Your text is never uploaded - no API key, no cloud, no telemetry.</p>
+
+  <div class="samples" id="samples"></div>
+
+  <textarea id="msg" placeholder="Paste the suspicious message here..."></textarea>
+
+  <div class="row">
+    <button id="go">Analyze on-device</button>
+    <span id="status"></span>
+  </div>
+  <div id="bar" class="bar hidden"><div id="fill"></div></div>
+
+  <section id="err" class="err hidden"></section>
+
+  <section id="card" class="card hidden">
+    <div class="vrow">
+      <span id="verdict" class="badge"~GT&#8230;</span>
+      <span id="confidence" class="pill hidden"></span>
+    </div>
+    <div class="sec" id="sec-tactics">
+      <h3>Manipulation tactics</h3>
+      <div id="tactics" class="chips"></div>
+    </div>
+    <div class="sec" id="sec-why">
+      <h3>Why this verdict</h3>
+      <ul id="why"></ul>
+    </div>
+    <div class="sec" id="sec-dont">
+      <h3>Do NOT</h3>
+      <ul id="dont"></ul>
+    </div>
+    <div class="sec" id="sec-safer">
+      <h3>Safer next step</h3>
+      <p id="safer"></p>
+    </div>
+  </section>
+
+  <pre id="raw" class="raw hidden"></pre>
+
+  <footer>100% on-device inference with @qvac/sdk (QVAC by Tether) - the model file downloads once on
+    first run, after which ScamScope works offline. MIT licensed.</footer>
+</main>
+
+<script>
+(function () {
+  var SAMPLES = [
+    { label: 'Delivery-fee scam', text: 'USPS: Your package is on hold due to an unpaid delivery fee. Pay the remaining $1.99 at usps-track-i.com/pay within 12 hours or your parcel will be returned to sender.' },
+    { label: 'Bank OTP scam', text: 'URGENT from your bank: we detected an unusual login. Verify your identity by sharing the OTP we just sent to your phone, or your account will be permanently blocked in 24 hours.' },
+    { label: 'Prize scam', text: 'Congratulations! You have been selected to receive a $950 Walmart reward. Claim it within 6 hours by clicking the link and entering your card details for the $1 processing fee.' },
+    { label: 'Normal message', text: 'Hi! This is Ramesh from the apartment committee. The water tank cleaning is scheduled for Saturday 10am. Please keep your balcony taps closed from 9 to 12.' }
+  ];
+
+  var msgEl = document.getElementById('msg');
+  var goEl = document.getElementById('go');
+  var statusEl = document.getElementById('status');
+  var barEl = document.getElementById('bar');
+  var fillEl = document.getElementById('fill');
+  var errEl = document.getElementById('err');
+  var cardEl = document.getElementById('card');
+  var verdictEl = document.getElementById('verdict');
+  var confEl = document.getElementById('confidence');
+  var tacticsEl = document.getElementById('tactics');
+  var whyEl = document.getElementById('why');
+  var dontEl = document.getElementById('dont');
+  var saferEl = document.getElementById('safer');
+  var secTactics = document.getElementById('sec-tactics');
+  var secWhy = document.getElementById('sec-why');
+  var secDont = document.getElementById('sec-dont');
+  var secSafer = document.getElementById('sec-safer');
+  var rawEl = document.getElementById('raw');
+  var samplesEl = document.getElementById('samples');
+
+  SAMPLES.forEach(function (s) {
+    var b = document.createElement('button');
+    b.className = 'chip-btn';
+    b.textContent = s.label;
+    b.onclick = function () { msgEl.value = s.text; };
+    samplesEl.appendChild(b);
+  });
+
+  function reset() {
+    errEl.classList.add('hidden');
+    cardEl.classList.remove('hidden');
+    secTactics.classList.add('hidden');
+    secWhy.classList.add('hidden');
+    secDont.classList.add('hidden');
+    secSafer.classList.add('hidden');
+    confEl.classList.add('hidden');
+    rawEl.classList.add('hidden');
+    verdictEl.className = 'badge';
+    verdictEl.textContent = '\u2026';
+    tacticsEl.innerHTML = '';
+    whyEl.innerHTML = '';
+    dontEl.innerHTML = '';
+    saferEl.textContent = '';
+  }
+
+  function classifyVerdict(v) {
+    var u = v.toUpperCase();
+    if (u.indexOf('LIKELY LEGIT') !== -1) return 'legit';
+    if (u.indexOf('SUSPICIOUS') !== -1) return 'susp';
+    if (u.indexOf('SCAM') !== -1) return 'scam';
+    return '';
+  }
+
+  function render(text) {
+    rawEl.textContent = text;
+    rawEl.classList.remove('hidden');
+    var lines = text.split('\n');
+    var section = '';
+    var verdict = '';
+    var conf = '';
+    var safer = '';
+    var tactics = [];
+    var why = [];
+    var dont = [];
+
+    for (var i = 0; i < lines.length; i++) {
+      var L = lines[i].trim();
+      if (/^VERDICT:/i.test(L)) { verdict = L.slice(8).trim(); section = ''; }
+      else if (/^CONFIDENCE:/i.test(L)) { conf = L.slice(11).trim(); section = ''; }
+      else if (/^TACTICS:/i.test(L)) { section = 'tactics'; }
+      else if (/^WHY:/i.test(L)) { section = 'why'; }
+      else if (/^DO NOT:/i.test(L)) { section = 'dont'; }
+      else if (/^SAFER STEP:/i.test(L)) { safer = L.slice(11).trim(); section = 'safer'; }
+      else if (L.charAt(0) === '-' || L.charAt(0) === '*') {
+        var item = L.replace(/^[-*]\s+/, '');
+        if (!item) continue;
+        if (section === 'tactics') tactics.push(item);
+        else if (section === 'why') why.push(item);
+        else if (section === 'dont') dont.push(item);
+        else if (section === 'safer' && safer) safer = safer + ' ' + item;
+      } else if (section === 'safer' && L && safer) {
+        safer = safer + ' ' + L;
+      }
+    }
+
+    if (verdict) {
+      verdictEl.textContent = verdict;
+      var cls = classifyVerdict(verdict);
+      verdictEl.className = cls ? 'badge ' + cls : 'badge';
+    } else {
+      verdictEl.textContent = 'Analyzing\u2026';
+    }
+    if (conf) { confEl.textContent = 'Confidence: ' + conf; confEl.classList.remove('hidden'); }
+
+    if (tactics.length) {
+      secTactics.classList.remove('hidden');
+      tacticsEl.innerHTML = '';
+      var looksClean = tactics.join(' ').toLowerCase().indexOf('none detected') !== -1;
+      tactics.forEach(function (t) {
+        var c = document.createElement('span');
+        c.className = looksClean ? 'tchip ok' : 'tchip';
+        c.textContent = t;
+        tacticsEl.appendChild(c);
+      });
+    }
+    if (why.length) {
+      secWhy.classList.remove('hidden');
+      whyEl.innerHTML = '';
+      why.forEach(function (w) {
+        var li = document.createElement('li');
+        li.textContent = w;
+        whyEl.appendChild(li);
+      });
+    }
+    if (dont.length) {
+      secDont.classList.remove('hidden');
+      dontEl.innerHTML = '';
+      dont.forEach(function (w) {
+        var li = document.createElement('li');
+        li.textContent = w;
+        dontEl.appendChild(li);
+      });
+    }
+    if (safer) {
+      secSafer.classList.remove('hidden');
+      saferEl.textContent = safer;
+    }
+  }
+
+  function setStatus(s) { statusEl.textContent = s; }
+
+  async function analyze() {
+    var text = msgEl.value.trim();
+    if (text.length < 5) { setStatus('Paste a message first (at least 5 characters).'); return; }
+    goEl.disabled = true;
+    reset();
+    setStatus('Contacting local model\u2026');
+    var buf = '';
+    var full = '';
+    var decoder = new TextDecoder();
+    try {
+      var res = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      var reader = res.body.getReader();
+      while (true) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buf += decoder.decode(chunk.value, { stream: true });
+        var idx = buf.indexOf('\n\n');
+        while (idx !== -1) {
+          var frame = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          idx = buf.indexOf('\n\n');
+          var ev = '';
+          var data = '';
+          frame.split('\n').forEach(function (line) {
+            if (line.indexOf('event:') === 0) ev = line.slice(6).trim();
+            else if (line.indexOf('data:') === 0) data += line.slice(5).trim();
+          });
+          if (!data) continue;
+          var obj;
+          try { obj = JSON.parse(data); } catch (e) { continue; }
+          if (ev === 'status' && obj.phase === 'loading') {
+            barEl.classList.remove('hidden');
+            fillEl.style.width = Math.max(2, obj.progress || 0) + '%';
+            setStatus('Downloading model (first run only): ' + Math.round(obj.progress) + '%');
+          } else if (ev === 'status' && obj.phase === 'analyzing') {
+            barEl.classList.add('hidden');
+            setStatus('Analyzing on your device\u2026');
+          } else if (ev === 'token') {
+            full += obj.text;
+            render(full);
+          } else if (ev === 'done') {
+            setStatus('Done \u2713 (on-device)');
+            rawEl.classList.add('hidden');
+          } else if (ev === 'error') {
+            errEl.textContent = obj.message;
+            errEl.classList.remove('hidden');
+            setStatus('');
+          }
+        }
+      }
+      if (full) { render(full); rawEl.classList.add('hidden'); }
+    } catch (e) {
+      errEl.textContent = 'Could not reach the local server. Is "npm start" still running?';
+      errEl.classList.remove('hidden');
+    }
+    goEl.disabled = false;
+  }
+
+  goEl.onclick = analyze;
+  msgEl.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') analyze();
+  });
+})();
+</script>
+</body>
+</html>
