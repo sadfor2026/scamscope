@@ -44,6 +44,8 @@ file is the only thing ever downloaded, once, from the QVAC model registry.
 ## Install
 
 ```bash
+git clone https://github.com/sadfor2026/scamscope.git
+cd scamscope
 npm install
 ```
 
