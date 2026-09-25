@@ -3,5 +3,5 @@
   "loggerConsoleOutput": true,
   "httpDownloadConcurrency": 3,
   "httpConnectionTimeoutMs": 30000,
-  "rpcInitTimeoutMs": 120000
+  "rpcInitTimeoutMs": 1800000
 }
